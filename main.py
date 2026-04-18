@@ -13,8 +13,6 @@ PASSWORD  = "51110106439"
 USERNAME_SELECTOR   = "#ctl00_cph1_txtStuUser"
 PASSWORD_SELECTOR   = "#ctl00_cph1_txtStuPsw"
 LOGIN_BTN_SELECTOR  = "#btnStuLogin"
-ASSIGNMENTS_LINK    = "#PLACEHOLDER_assignments_nav"  # nav link to Assignments section
-ASSIGNMENTS_PAGE_EL = "#PLACEHOLDER_assignments_page" # element confirming Assignments page loaded
 
 
 def login(page) -> None:
@@ -32,7 +30,7 @@ def login(page) -> None:
 
     print("[4/4] Waiting for post-login navigation...")
     try:
-        page.wait_for_url("**/ParentDesk1.aspx", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_url("**/ParentDesk1.aspx", wait_until="domcontentloaded", timeout=120000)
         print("      Login successful.")
     except PlaywrightTimeoutError:
         print(f"      Login failed. Current URL: {page.url}")
@@ -40,25 +38,20 @@ def login(page) -> None:
 
 
 def navigate_to_assignments(page) -> None:
-    """Click the Assignments nav link and wait for the page to load."""
-    print("[5/6] Clicking Assignments link...")
-    try:
-        page.wait_for_selector(ASSIGNMENTS_LINK, state="visible", timeout=10000)
-        page.click(ASSIGNMENTS_LINK)
-    except PlaywrightTimeoutError:
-        raise RuntimeError(
-            f"Assignments link '{ASSIGNMENTS_LINK}' not found. Update ASSIGNMENTS_LINK selector."
-        )
+    """Click Academic tab to expand submenu, then click Assignments."""
+    print("[5/6] Clicking Academic tab...")
+    academic = page.get_by_text("Academic", exact=True)
+    academic.wait_for(state="visible", timeout=120000)
+    academic.click()
 
-    print("[6/6] Waiting for Assignments page to load...")
-    try:
-        page.wait_for_selector(ASSIGNMENTS_PAGE_EL, state="visible", timeout=10000)
-        print("      Assignments page loaded successfully.")
-    except PlaywrightTimeoutError:
-        raise RuntimeError(
-            f"Assignments page element '{ASSIGNMENTS_PAGE_EL}' not found. "
-            "Update ASSIGNMENTS_PAGE_EL selector."
-        )
+    print("      Waiting for submenu to expand...")
+    page.wait_for_timeout(1500)
+
+    print("[6/6] Clicking Assignments option...")
+    assignments = page.get_by_text("Assignments", exact=True)
+    assignments.wait_for(state="visible", timeout=120000)
+    assignments.click()
+    print("      Assignments page loaded successfully.")
 
 
 def main() -> None:
