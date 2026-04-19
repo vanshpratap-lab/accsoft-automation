@@ -96,8 +96,8 @@ def _scan_subject_rows(page) -> list[dict]:
     ]
 
 
-def extract_assignments(page) -> None:
-    """Phase 2: scan and print subjects that have new assignments."""
+def extract_assignments(page) -> list[dict]:
+    """Phase 2: scan and print subjects that have new assignments. Returns targets for Phase 3."""
     print("\n[Phase 2] Waiting for assignments table to load...")
     page.wait_for_timeout(2000)
 
@@ -110,6 +110,8 @@ def extract_assignments(page) -> None:
         for t in targets:
             print(f"Subject: {t['subject']} → has new assignments")
     print("=" * 60)
+
+    return targets
 
 
 def _return_to_assignments(page) -> None:
@@ -127,16 +129,13 @@ def _return_to_assignments(page) -> None:
     page.wait_for_timeout(2000)
 
 
-def open_subjects(page) -> None:
+def open_subjects(page, targets: list[dict]) -> None:
     """
     Phase 3 Step 3.1: click each subject that has new assignments one at a
     time, then re-navigate back to the assignments page before the next one.
+    Receives targets from Phase 2 — no re-scan performed.
     """
-    print("\n[Phase 3.1] Scanning for subjects to open...")
-    page.wait_for_timeout(2000)
-
-    # First pass — collect indices only, no clicking
-    targets = _scan_subject_rows(page)
+    print("\n[Phase 3.1] Opening subjects with new assignments...")
 
     if not targets:
         print("  No subjects with new assignments — nothing to open.")
@@ -173,8 +172,8 @@ def main() -> None:
         try:
             login(page)
             navigate_to_assignments(page)
-            extract_assignments(page)
-            open_subjects(page)
+            targets = extract_assignments(page)
+            open_subjects(page, targets)
             print("\nPhase 3.1 complete. Browser stays open for 5 seconds...")
             page.wait_for_timeout(5000)
         except Exception as e:
