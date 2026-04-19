@@ -54,6 +54,51 @@ def navigate_to_assignments(page) -> None:
     print("      Assignments page loaded successfully.")
 
 
+def extract_assignments(page) -> None:
+    """Read the assignments table and print subjects with new assignments."""
+    print("\n[Phase 2] Waiting for assignments table to load...")
+    page.wait_for_timeout(2000)
+
+    rows = page.locator("table tr")
+    row_count = rows.count()
+    print(f"[DEBUG] Total rows found: {row_count}")
+
+    subject_totals: dict[str, int] = {}
+
+    for i in range(row_count):
+        row = rows.nth(i)
+        cells = row.locator("td")
+        cell_count = cells.count()
+
+        if cell_count != 5:
+            continue
+
+        subject_name = cells.nth(1).inner_text().strip()
+        new_count_text = cells.nth(2).inner_text().strip()
+
+        if not subject_name:
+            continue
+
+        try:
+            new_count = int(new_count_text)
+        except ValueError:
+            new_count = 0
+
+        subject_totals[subject_name] = subject_totals.get(subject_name, 0) + new_count
+
+    # --- Print results ---
+    print("=" * 60)
+    subjects_with_work = {s: c for s, c in subject_totals.items() if c > 0}
+
+    if not subjects_with_work:
+        print("No subjects with new assignments found.")
+    else:
+        for subject, count in subjects_with_work.items():
+            label = "new assignment" if count == 1 else "new assignments"
+            print(f"Subject: {subject} → {count} {label}")
+    print("=" * 60)
+
+
 def main() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -62,7 +107,8 @@ def main() -> None:
         try:
             login(page)
             navigate_to_assignments(page)
-            print("\nPhase 1 complete. Browser stays open for 5 seconds...")
+            extract_assignments(page)
+            print("\nPhase 2 complete. Browser stays open for 5 seconds...")
             page.wait_for_timeout(5000)
         except Exception as e:
             print(f"\n[ERROR] {e}")
