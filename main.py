@@ -54,23 +54,24 @@ def navigate_to_assignments(page) -> None:
     print("      Assignments page loaded successfully.")
 
 
-def extract_assignments(page) -> None:
-    """Read the assignments table and print subjects with new assignments."""
-    print("\n[Phase 2] Waiting for assignments table to load...")
-    page.wait_for_timeout(2000)
+def _scan_subject_rows(page) -> list[dict]:
+    """
+    First pass: scan the assignments table and return a list of dicts for
+    rows where new-assignment count > 0.
 
+    Each dict holds:
+      - subject:   display name
+      - row_index: position in "table tr" (used to re-locate after go_back)
+    """
     rows = page.locator("table tr")
     row_count = rows.count()
-    print(f"[DEBUG] Total rows found: {row_count}")
 
-    subject_totals: dict[str, int] = {}
+    # subject_name → {total_new, first_row_index}
+    seen: dict[str, dict] = {}
 
     for i in range(row_count):
-        row = rows.nth(i)
-        cells = row.locator("td")
-        cell_count = cells.count()
-
-        if cell_count != 5:
+        cells = rows.nth(i).locator("td")
+        if cells.count() != 5:
             continue
 
         subject_name = cells.nth(1).inner_text().strip()
@@ -84,19 +85,84 @@ def extract_assignments(page) -> None:
         except ValueError:
             new_count = 0
 
-        subject_totals[subject_name] = subject_totals.get(subject_name, 0) + new_count
+        if subject_name not in seen:
+            seen[subject_name] = {"total_new": 0, "first_row_index": i}
+        seen[subject_name]["total_new"] += new_count
 
-    # --- Print results ---
+    return [
+        {"subject": name, "row_index": info["first_row_index"]}
+        for name, info in seen.items()
+        if info["total_new"] > 0
+    ]
+
+
+def extract_assignments(page) -> None:
+    """Phase 2: scan and print subjects that have new assignments."""
+    print("\n[Phase 2] Waiting for assignments table to load...")
+    page.wait_for_timeout(2000)
+
+    targets = _scan_subject_rows(page)
+
     print("=" * 60)
-    subjects_with_work = {s: c for s, c in subject_totals.items() if c > 0}
-
-    if not subjects_with_work:
+    if not targets:
         print("No subjects with new assignments found.")
     else:
-        for subject, count in subjects_with_work.items():
-            label = "new assignment" if count == 1 else "new assignments"
-            print(f"Subject: {subject} → {count} {label}")
+        for t in targets:
+            print(f"Subject: {t['subject']} → has new assignments")
     print("=" * 60)
+
+
+def _return_to_assignments(page) -> None:
+    """Re-navigate to the assignments page via the Academic submenu."""
+    academic = page.get_by_text("Academic", exact=True)
+    academic.wait_for(state="visible", timeout=60000)
+    academic.click()
+
+    page.wait_for_timeout(1500)
+
+    assignments = page.locator("a:has-text('Assignments')").first
+    assignments.wait_for(state="visible", timeout=60000)
+    assignments.click()
+
+    page.wait_for_timeout(2000)
+
+
+def open_subjects(page) -> None:
+    """
+    Phase 3 Step 3.1: click each subject that has new assignments one at a
+    time, then re-navigate back to the assignments page before the next one.
+    """
+    print("\n[Phase 3.1] Scanning for subjects to open...")
+    page.wait_for_timeout(2000)
+
+    # First pass — collect indices only, no clicking
+    targets = _scan_subject_rows(page)
+
+    if not targets:
+        print("  No subjects with new assignments — nothing to open.")
+        return
+
+    print(f"  Found {len(targets)} subject(s) to open.\n")
+
+    for t in targets:
+        subject = t["subject"]
+        row_index = t["row_index"]
+
+        # Re-fetch rows fresh (DOM may differ after each navigation)
+        rows = page.locator("table tr")
+        row = rows.nth(row_index)
+
+        print(f"  Clicking subject: {subject} ...")
+        row.click()
+
+        page.wait_for_load_state("domcontentloaded", timeout=60000)
+        page.wait_for_timeout(1500)
+        print(f"  Opened subject: {subject}")
+
+        # Navigate back via menu — never rely on browser history
+        print("  Returning to assignments page...")
+        _return_to_assignments(page)
+        print("  Assignments table reloaded.\n")
 
 
 def main() -> None:
@@ -108,7 +174,8 @@ def main() -> None:
             login(page)
             navigate_to_assignments(page)
             extract_assignments(page)
-            print("\nPhase 2 complete. Browser stays open for 5 seconds...")
+            open_subjects(page)
+            print("\nPhase 3.1 complete. Browser stays open for 5 seconds...")
             page.wait_for_timeout(5000)
         except Exception as e:
             print(f"\n[ERROR] {e}")
