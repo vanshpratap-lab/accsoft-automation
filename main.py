@@ -129,6 +129,60 @@ def _return_to_assignments(page) -> None:
     page.wait_for_timeout(2000)
 
 
+def extract_subject_assignments(page, subject_name: str) -> None:
+    """
+    Phase 3.2: Extract assignment details using data-label selectors.
+    Does NOT click anything.
+    """
+    print(f"\n  [Phase 3.2] Extracting assignments for: {subject_name}")
+
+    try:
+        page.wait_for_selector("#ctl00_ContentPlaceHolder1_DataList2", timeout=15000)
+    except PlaywrightTimeoutError:
+        print("    [warn] Container #ctl00_ContentPlaceHolder1_DataList2 not found.")
+
+    container = page.locator("#ctl00_ContentPlaceHolder1_DataList2")
+    rows = container.locator("tr.GreenPage2")
+    count = rows.count()
+    print(f"    [debug] Rows inside correct container: {count}")
+
+    # Retry once if AJAX content hasn't rendered yet
+    if count == 0:
+        print("    [debug] No rows found — retrying after 3s...")
+        page.wait_for_timeout(3000)
+        rows = container.locator("tr.GreenPage2")
+        count = rows.count()
+        print(f"    [debug] Rows after retry: {count}")
+
+    total_assignments = 0
+    print(f"\n  Subject: {subject_name}")
+
+    for i in range(count):
+        row = rows.nth(i)
+        cells = row.locator("td")
+        cell_count = cells.count()
+
+        if cell_count < 5:
+            continue
+
+        texts = [cells.nth(j).inner_text().strip() for j in range(cell_count)]
+
+        assign_no = texts[2]
+        due_date  = texts[3]
+        status    = texts[-1]
+
+        if not assign_no or not due_date:
+            continue
+
+        total_assignments += 1
+        print(f"  Assignment {assign_no} | Due: {due_date} | Status: {status}")
+
+    if total_assignments == 0:
+        print("  No assignments found.")
+
+    print(f"  Total assignments found: {total_assignments}")
+
+
 def open_subjects(page, targets: list[dict]) -> None:
     """
     Phase 3 Step 3.1: click each subject that has new assignments one at a
@@ -152,14 +206,35 @@ def open_subjects(page, targets: list[dict]) -> None:
         row = rows.nth(row_index)
 
         print(f"  Clicking subject: {subject} ...")
-        row.click()
+        view_button = row.locator("td").nth(2).locator("a, button")
+        if view_button.count() == 0:
+            view_button = row.locator("a, button").first
+        view_button.click()
+        print("  Clicked correct subject view button")
 
         page.wait_for_load_state("domcontentloaded", timeout=60000)
-        page.wait_for_timeout(1500)
-        print(f"  Opened subject: {subject}")
+
+        # Phase 3.2 context guard: wait for old list to detach, then new content to appear
+        try:
+            page.wait_for_selector("text=New Assignment", state="detached", timeout=10000)
+        except PlaywrightTimeoutError:
+            print("  [debug] 'New Assignment' text did not detach — may be AJAX partial reload.")
+
+        try:
+            page.wait_for_selector('td[data-label="Assign. No."]', timeout=15000)
+        except PlaywrightTimeoutError:
+            print("  [warn] Assignment rows not found — falling back with 3s wait...")
+            page.wait_for_timeout(3000)
+
+        row_count = page.locator('td[data-label="Assign. No."]').count()
+        print(f"  Now on subject page, rows: {row_count}")
+        print(f"  [debug] Current URL: {page.url}")
+
+        # Phase 3.2: extract assignments from the subject page
+        extract_subject_assignments(page, subject)
 
         # Navigate back via menu — never rely on browser history
-        print("  Returning to assignments page...")
+        print("\n  Returning to assignments page...")
         _return_to_assignments(page)
         print("  Assignments table reloaded.\n")
 
@@ -174,7 +249,7 @@ def main() -> None:
             navigate_to_assignments(page)
             targets = extract_assignments(page)
             open_subjects(page, targets)
-            print("\nPhase 3.1 complete. Browser stays open for 5 seconds...")
+            print("\nPhase 3.2 complete. Browser stays open for 5 seconds...")
             page.wait_for_timeout(5000)
         except Exception as e:
             print(f"\n[ERROR] {e}")
