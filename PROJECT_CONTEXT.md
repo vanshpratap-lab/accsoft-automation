@@ -14,15 +14,15 @@ PROJECT: Accsoft Automation
 
 
 
-\* Phase 2 completed (Assignment detection — needs minor fix)
+\* Phase 2 completed and FIXED (Assignment detection working correctly)
 
 
 
-\* Phase 3.1 completed (Subject navigation working)
+\* Phase 3.1 completed (Subject navigation stable)
 
 
 
-\* Git branching introduced:
+\* Git workflow:
 
 
 
@@ -56,7 +56,7 @@ PROJECT: Accsoft Automation
 
 
 
-\## PHASE 2: Assignment Detection ⚠️ (Needs Fix)
+\## PHASE 2: Assignment Detection ✅
 
 
 
@@ -68,23 +68,29 @@ Goal:
 
 
 
-Current Issue:
+Implementation:
 
 
 
-\* Phase 2 sometimes prints:
+\* Parse assignments table rows
 
-&#x20; "No subjects with new assignments found"
+\* Filter valid rows (len(cells) == 5)
 
-\* But Phase 3 correctly detects subjects
+\* Extract:
+
+&#x20; subject name
+
+&#x20; new assignment count
+
+\* Store results in structured format (list/dict)
+
+\* Return data for reuse in Phase 3
 
 
 
-Conclusion:
+Output example:
 
-
-
-\* Phase 2 extraction logic OR filtering condition is inconsistent
+Subject: Engineering Physics \& Materials → has new assignments
 
 
 
@@ -100,11 +106,11 @@ Goal:
 
 
 
-\* Click subjects with new assignments one-by-one
+\* Open subjects with new assignments sequentially
 
 
 
-Implemented:
+Implementation:
 
 
 
@@ -128,11 +134,27 @@ Assignments → Subject → Assignments → Next Subject
 
 
 
-\## CURRENT TASK
+\## NEXT TASK (CURRENT FOCUS)
 
 
 
-Fix Phase 2 inconsistency
+Phase 3.2 → Detect assignments inside subject page
+
+
+
+Goal:
+
+
+
+\* Extract assignment details inside each subject:
+
+
+
+&#x20; \* Assignment number
+
+&#x20; \* Due date
+
+&#x20; \* Detect download availability
 
 
 
@@ -140,11 +162,15 @@ Fix Phase 2 inconsistency
 
 
 
-\## NEXT PHASE
+\## UPCOMING PHASES
 
 
 
-Phase 3.2 → Detect assignments inside subject page
+Phase 3.3 → Download assignment files
+
+Phase 3.4 → AI solve assignments
+
+Phase 3.5 → Upload solutions
 
 
 
@@ -188,9 +214,11 @@ Phase 3.2 → Detect assignments inside subject page
 
 \* Do NOT modify Phase 1 logic
 
+\* Do NOT modify Phase 2 logic
+
 \* Do NOT modify Phase 3.1 logic
 
-\* Only fix Phase 2 logic now
+\* Only extend Phase 3 further
 
 
 
@@ -202,7 +230,7 @@ Phase 3.2 → Detect assignments inside subject page
 
 
 
-Build a fully automated system:
+Build full automation pipeline:
 
 
 
