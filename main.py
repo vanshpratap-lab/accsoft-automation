@@ -169,7 +169,15 @@ def extract_subject_assignments(page, subject_name: str) -> None:
 
         assign_no = texts[2]
         due_date  = texts[3]
-        status    = texts[-1]
+
+        status_cell = cells.nth(cell_count - 1)
+        status = status_cell.inner_text().strip()
+        if not status:
+            btn = status_cell.locator("button, input, a")
+            if btn.count() > 0:
+                status = btn.first.inner_text().strip()
+        if not status:
+            status = "Unknown"
 
         if not assign_no or not due_date:
             continue
