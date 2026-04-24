@@ -1,4 +1,8 @@
-PROJECT: Accsoft Automation
+PROJECT\_CONTEXT.md
+
+
+
+\# PROJECT: Accsoft Automation
 
 
 
@@ -10,25 +14,23 @@ PROJECT: Accsoft Automation
 
 
 
-\* Phase 1 completed (Login + Navigation)
+✔ Phase 1 completed (Login + Navigation stable)  
+
+✔ Phase 2 completed and FIXED (Assignment detection accurate)  
+
+✔ Phase 3.1 completed (Subject navigation stable and sequential)  
+
+✔ Phase 3.2 completed (Assignment extraction working)
 
 
 
-\* Phase 2 completed and FIXED (Assignment detection working correctly)
+Git workflow:
 
 
 
-\* Phase 3.1 completed (Subject navigation stable)
+\- main → stable production code
 
-
-
-\* Git workflow:
-
-
-
-&#x20; \* main → stable
-
-&#x20; \* dev → active development
+\- dev → active development branch
 
 
 
@@ -40,15 +42,35 @@ PROJECT: Accsoft Automation
 
 
 
-\* Open login page
+\### Goal:
 
-\* Fill credentials
+Automate login and reach assignments section
 
-\* Detect login via URL change
 
-\* Navigate:
+
+\### Implementation:
+
+
+
+\- Open login page
+
+\- Fill credentials
+
+\- Submit form
+
+\- Wait for successful login (URL change detection)
+
+\- Navigate:
 
 &#x20; Dashboard → Academic → Assignments
+
+
+
+\### Status:
+
+✔ Stable  
+
+✔ No changes required
 
 
 
@@ -60,37 +82,43 @@ PROJECT: Accsoft Automation
 
 
 
-Goal:
+\### Goal:
+
+Identify subjects with new assignments
 
 
 
-\* Detect subjects with new assignments
+\### Implementation:
 
 
 
-Implementation:
+\- Locate assignments table
+
+\- Filter valid rows (len(cells) == 5)
+
+\- Extract:
+
+&#x20; - Subject name
+
+&#x20; - New assignment count
+
+\- Group duplicate subjects
+
+\- Return structured list of subjects with new assignments
 
 
 
-\* Parse assignments table rows
-
-\* Filter valid rows (len(cells) == 5)
-
-\* Extract:
-
-&#x20; subject name
-
-&#x20; new assignment count
-
-\* Store results in structured format (list/dict)
-
-\* Return data for reuse in Phase 3
-
-
-
-Output example:
+\### Output Example:
 
 Subject: Engineering Physics \& Materials → has new assignments
+
+
+
+\### Status:
+
+✔ Fully working  
+
+✔ Bug-fixed (correct row parsing)
 
 
 
@@ -102,31 +130,109 @@ Subject: Engineering Physics \& Materials → has new assignments
 
 
 
-Goal:
+\### Goal:
+
+Open each subject with new assignments sequentially
 
 
 
-\* Open subjects with new assignments sequentially
+\### Implementation:
 
 
 
-Implementation:
+\- Store row indices (NOT locators)
+
+\- Re-fetch rows after each navigation
+
+\- Click subject → open → return safely
+
+\- Avoid `go\_back()` (use controlled navigation)
 
 
 
-\* Store row indices (not locators)
-
-\* Re-fetch rows after navigation
-
-\* Controlled navigation:
-
-&#x20; Academic → Assignments (no page.go\_back)
+\### Flow:
 
 
-
-Flow:
 
 Assignments → Subject → Assignments → Next Subject
+
+
+
+\### Status:
+
+✔ Stable  
+
+✔ No navigation issues
+
+
+
+\---
+
+
+
+\## PHASE 3.2: Assignment Extraction ✅
+
+
+
+\### Goal:
+
+Extract assignment data from subject page
+
+
+
+\### Implementation:
+
+
+
+\- Navigate to subject page (Assignment.aspx)
+
+\- Locate assignment container
+
+\- Extract rows using:
+
+&#x20; tr.GreenPage2
+
+\- Extract per row:
+
+&#x20; - Assignment Number (index 2)
+
+&#x20; - Due Date (index 3)
+
+&#x20; - Status (button-based detection)
+
+
+
+\### Logic:
+
+
+
+\- Skip invalid rows
+
+\- Use index-based extraction (robust against layout issues)
+
+\- Handle dynamic DOM (non-standard table structure)
+
+
+
+\### Output Example:
+
+
+
+Assignment 05 | Due: 20-Apr-2026 | Status: Upload  
+
+Assignment 04 | Due: 13-Apr-2026 | Status: Date Expired  
+
+
+
+\### Status:
+
+
+
+✔ Assignment extraction working  
+
+✔ Multi-subject extraction working  
+
+⚠ Status detection partially working (buttons need better parsing — improvement pending)
 
 
 
@@ -138,23 +244,19 @@ Assignments → Subject → Assignments → Next Subject
 
 
 
-Phase 3.2 → Detect assignments inside subject page
+\## 🚀 PHASE 3.3 → Download Assignments
 
 
 
-Goal:
+\### Goal:
 
 
 
-\* Extract assignment details inside each subject:
+\- Automatically click "Download" button
 
+\- Save assignment files locally
 
-
-&#x20; \* Assignment number
-
-&#x20; \* Due date
-
-&#x20; \* Detect download availability
+\- Organize by subject
 
 
 
@@ -166,11 +268,21 @@ Goal:
 
 
 
-Phase 3.3 → Download assignment files
+\### Phase 3.4 → AI Solve Assignments
 
-Phase 3.4 → AI solve assignments
 
-Phase 3.5 → Upload solutions
+
+\- Process downloaded files
+
+\- Generate answers using AI
+
+
+
+\### Phase 3.5 → Upload Solutions
+
+
+
+\- Upload solved assignments automatically
 
 
 
@@ -182,9 +294,9 @@ Phase 3.5 → Upload solutions
 
 
 
-\* Python 3.14
+\- Python 3.14
 
-\* Playwright (sync API)
+\- Playwright (sync API)
 
 
 
@@ -196,11 +308,11 @@ Phase 3.5 → Upload solutions
 
 
 
-\* main.py → automation logic
+\- main.py → core automation logic
 
-\* requirements.txt → dependencies
+\- requirements.txt → dependencies
 
-\* PROJECT\_CONTEXT.md → project state
+\- PROJECT\_CONTEXT.md → project state
 
 
 
@@ -212,13 +324,15 @@ Phase 3.5 → Upload solutions
 
 
 
-\* Do NOT modify Phase 1 logic
+\- DO NOT modify Phase 1 logic
 
-\* Do NOT modify Phase 2 logic
+\- DO NOT modify Phase 2 logic
 
-\* Do NOT modify Phase 3.1 logic
+\- DO NOT modify Phase 3.1 logic
 
-\* Only extend Phase 3 further
+\- DO NOT break working extraction logic in Phase 3.2
+
+\- Only extend functionality forward
 
 
 
@@ -226,7 +340,7 @@ Phase 3.5 → Upload solutions
 
 
 
-\## GOAL
+\## FINAL GOAL
 
 
 
@@ -234,7 +348,5 @@ Build full automation pipeline:
 
 
 
-Login → Detect Assignments → Open Subject → Extract Assignments → Download → AI Solve → Upload
-
-
+Login → Detect Subjects → Open Subject → Extract Assignments → Download → AI Solve → Upload
 
