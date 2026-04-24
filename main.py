@@ -1,5 +1,10 @@
 import os
 import requests
+import pdfplumber
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from PIL import Image
+from docx import Document
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -18,6 +23,106 @@ PASSWORD_SELECTOR   = "#ctl00_cph1_txtStuPsw"
 LOGIN_BTN_SELECTOR  = "#btnStuLogin"
 
 
+# ---------------------------------------------------------------------------
+# PHASE 3.4: File reading + OCR fallback
+# ---------------------------------------------------------------------------
+def extract_pdf_text(path: str) -> str:
+    text = ""
+    try:
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+    except Exception as e:
+        print(f"  [PDF ERROR] {e}")
+    return text
+
+
+def extract_pdf_with_ocr(path: str) -> str:
+    try:
+        import pdf2image
+        images = pdf2image.convert_from_path(path)
+        text = ""
+        for img in images:
+            text += pytesseract.image_to_string(img)
+        print("  [OCR USED - PDF]")
+        return text
+    except Exception as e:
+        print(f"  [PDF OCR ERROR] {e}")
+        return ""
+
+
+def extract_image_text(path: str) -> str:
+    try:
+        img = Image.open(path)
+        text = pytesseract.image_to_string(img)
+        print("  [OCR USED - IMAGE]")
+        return text
+    except Exception as e:
+        print(f"  [OCR ERROR] {e}")
+        return ""
+
+
+def read_file_content(filepath: str) -> str:
+    """Extract text from PDF, DOCX, or image. OCR fallback for image-based PDFs."""
+    try:
+        ext = filepath.lower()
+
+        if ext.endswith(".pdf"):
+            text = extract_pdf_text(filepath)
+            if not text or len(text.strip()) < 200:
+                print("  [WARN] PDF text too short — trying OCR fallback...")
+                text = extract_pdf_with_ocr(filepath)
+            if not text.strip():
+                print("  [WARN] No readable content extracted from PDF")
+            return clean_text(text)
+
+        if ext.endswith(".docx"):
+            doc = Document(filepath)
+            parts = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    parts.append(para.text.strip())
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_text:
+                        parts.append(" | ".join(row_text))
+            text = "\n".join(parts)
+            if not text.strip():
+                print("  [WARN] No readable content extracted from DOCX")
+            return clean_text(text)
+
+        if ext.endswith((".jpg", ".jpeg", ".png")):
+            return extract_image_text(filepath)
+
+        return ""
+    except Exception as e:
+        print(f"  [warn] Could not read {filepath}: {e}")
+        return ""
+
+
+def clean_text(text: str) -> str:
+    """Strip empty lines only — no merging, to preserve equations and structure."""
+    return "\n".join(line.strip() for line in text.split("\n") if line.strip())
+
+
+def extract_questions(text: str) -> list[str]:
+    """Split text into questions using numbered-prefix pattern."""
+    import re
+    pattern = r'(Q\.?\d+|\d{1,2})[\)\.\s]+'
+    parts = re.split(pattern, text)
+
+    questions = []
+    for i in range(1, len(parts) - 1, 2):
+        q_num = parts[i].strip()
+        q_text = parts[i + 1].strip()
+        if q_text:
+            questions.append(f"{q_num}. {q_text}")
+
+    return questions
+
+
+# ---------------------------------------------------------------------------
 def login(page) -> None:
     """Open the login page, fill credentials, submit, and confirm login."""
     print("[1/4] Navigating to login page...")
@@ -200,9 +305,18 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                 full_url = base_url + relative_url.replace("../", "")
                 response = requests.get(full_url)
                 filename = full_url.split("/")[-1]
-                with open(f"downloads/{filename}", "wb") as f:
+                filepath = f"downloads/{filename}"
+                with open(filepath, "wb") as f:
                     f.write(response.content)
-                print(f"  Downloaded: {filename}")
+                print(f"  Downloaded: {filepath}")
+
+                # Phase 3.4: Extract and display questions
+                content = read_file_content(filepath)
+                if content:
+                    questions = extract_questions(content)
+                    print("\n  [ASSIGNMENT QUESTIONS]")
+                    for q in questions:
+                        print(f"  {q}")
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
 
