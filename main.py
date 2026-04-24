@@ -1,3 +1,6 @@
+import os
+import requests
+
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # ---------------------------------------------------------------------------
@@ -184,6 +187,24 @@ def extract_subject_assignments(page, subject_name: str) -> None:
 
         total_assignments += 1
         print(f"  Assignment {assign_no} | Due: {due_date} | Status: {status}")
+
+        # Phase 3.3: Download assignment file (direct URL — skips postback link)
+        os.makedirs("downloads", exist_ok=True)
+        download_link = row.locator('a[href*="Upload/Assignment"]')
+        if download_link.count() == 0:
+            print(f"  No download link found for {assign_no}")
+        else:
+            try:
+                relative_url = download_link.first.get_attribute("href")
+                base_url = "https://accsoft.piemr.edu.in/accsoft_piemr/"
+                full_url = base_url + relative_url.replace("../", "")
+                response = requests.get(full_url)
+                filename = full_url.split("/")[-1]
+                with open(f"downloads/{filename}", "wb") as f:
+                    f.write(response.content)
+                print(f"  Downloaded: {filename}")
+            except Exception as e:
+                print(f"  [warn] Download failed for {assign_no}: {e}")
 
     if total_assignments == 0:
         print("  No assignments found.")
