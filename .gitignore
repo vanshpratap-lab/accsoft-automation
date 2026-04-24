@@ -1,0 +1,6 @@
+# Ignore downloaded files
+downloads/
+
+# Optional (good practice)
+__pycache__/
+*.pyc
