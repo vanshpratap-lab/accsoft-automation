@@ -1,352 +1,191 @@
-PROJECT\_CONTEXT.md
+PROJECT_CONTEXT.md
 
 
 
-\# PROJECT: Accsoft Automation
+# PROJECT: Accsoft Automation
 
+---
 
+## CURRENT STATUS
 
-\---
+Project has successfully completed Phase 3.4 (Assignment Extraction).
 
+Automation pipeline is now able to:
 
+* Login to Accsoft portal
+* Detect subjects with new assignments
+* Navigate into each subject
+* Extract assignment metadata
+* Download assignment files
+* Extract readable content from files (PDF, DOCX, Images via OCR)
 
-\## CURRENT STATUS
+---
 
+## COMPLETED PHASES
 
+### Phase 1: Login + Navigation ✅
 
-✔ Phase 1 completed (Login + Navigation stable)  
+* Open login page
+* Enter credentials
+* Submit form
+* Detect successful login via URL
+* Navigate: Dashboard → Academic → Assignments
 
-✔ Phase 2 completed and FIXED (Assignment detection accurate)  
+---
 
-✔ Phase 3.1 completed (Subject navigation stable and sequential)  
+### Phase 2: Assignment Detection ✅
 
-✔ Phase 3.2 completed (Assignment extraction working)
+* Locate assignments table
+* Filter valid rows
+* Detect subjects with new assignments
+* Store subjects in structured format
 
+---
 
+### Phase 3.1: Subject Navigation ✅
 
-Git workflow:
+* Open only subjects with new assignments
+* Use row index strategy (avoid stale locators)
+* Stable navigation flow:
+  Assignments → Subject → Assignments
 
+---
 
+### Phase 3.2: Assignment Extraction ✅
 
-\- main → stable production code
+* Navigate to Assignment.aspx page
+* Extract:
 
-\- dev → active development branch
+  * Assignment Number
+  * Due Date
+  * Download availability
+* Handle dynamic table structure
 
+---
 
+### Phase 3.3: File Downloading ✅
 
-\---
+* Detect download links
+* Use Playwright download API
+* Save files locally
+* Organized folder structure:
 
+downloads/<subject_name>/<filename>
 
+---
 
-\## PHASE 1: Login + Navigation ✅
+### Phase 3.4: File Reading + OCR ✅
 
+#### Supported formats:
 
+* PDF → using pdfplumber
+* DOCX → using python-docx
+* Images → using pytesseract (OCR)
+* Scanned PDFs → OCR fallback via pdf2image + Tesseract
 
-\### Goal:
+#### Features:
 
-Automate login and reach assignments section
+* Automatic fallback if PDF has no text
+* OCR integration working (Tesseract configured manually)
+* Poppler installed for PDF → image conversion
 
+#### Processing:
 
+* Extract raw text
+* Clean text (remove empty lines)
+* Detect questions using regex
+* Output structured questions
 
-\### Implementation:
+#### Current limitations:
 
+* Some math equations not perfectly extracted
+* Occasional missing question (rare edge case)
+* OCR output may contain noise
 
+---
 
-\- Open login page
+## CURRENT OUTPUT FORMAT
 
-\- Fill credentials
+For each subject:
 
-\- Submit form
+* Assignment metadata printed
+* File downloaded
+* Questions extracted and printed
 
-\- Wait for successful login (URL change detection)
+Example:
 
-\- Navigate:
+=== Assignment 06 ===
+Questions:
+Q1 ...
+Q2 ...
+Q3 ...
 
-&#x20; Dashboard → Academic → Assignments
+---
 
+## PROJECT STRUCTURE
 
+* main.py → core automation logic
+* PROJECT_CONTEXT.md → project state
+* requirements.txt → dependencies
+* downloads/ → saved assignment files (ignored in git)
 
-\### Status:
+---
 
-✔ Stable  
+## TECH STACK
 
-✔ No changes required
+* Python 3.14
+* Playwright (sync API)
+* pdfplumber
+* python-docx
+* pytesseract (OCR)
+* pdf2image + Poppler
 
+---
 
+## GIT WORKFLOW
 
-\---
+* main → stable branch
+* dev → active development branch
 
+---
 
+## IMPORTANT RULES
 
-\## PHASE 2: Assignment Detection ✅
+* Do NOT modify Phase 1, 2, 3.1 logic
+* Extend only newer phases
+* Keep navigation stable (no page.go_back)
+* Always use re-fetch strategy for DOM
 
+---
 
+## NEXT PHASE
 
-\### Goal:
+### Phase 3.5: AI-Based Assignment Solving
 
-Identify subjects with new assignments
+Goal:
 
+* Take extracted questions
+* Send to AI model
+* Generate answers
+* Prepare for upload
 
+---
 
-\### Implementation:
+## FINAL GOAL
 
+Fully automated pipeline:
 
+Login → Detect → Open → Extract → Download → Read → Solve → Upload
 
-\- Locate assignments table
+---
 
-\- Filter valid rows (len(cells) == 5)
+## NOTES FOR NEXT SESSION
 
-\- Extract:
+* System is stable and functional
+* Focus next on:
 
-&#x20; - Subject name
+  * AI integration
+  * Answer generation
+  * Output formatting for submission
 
-&#x20; - New assignment count
-
-\- Group duplicate subjects
-
-\- Return structured list of subjects with new assignments
-
-
-
-\### Output Example:
-
-Subject: Engineering Physics \& Materials → has new assignments
-
-
-
-\### Status:
-
-✔ Fully working  
-
-✔ Bug-fixed (correct row parsing)
-
-
-
-\---
-
-
-
-\## PHASE 3.1: Subject Navigation ✅
-
-
-
-\### Goal:
-
-Open each subject with new assignments sequentially
-
-
-
-\### Implementation:
-
-
-
-\- Store row indices (NOT locators)
-
-\- Re-fetch rows after each navigation
-
-\- Click subject → open → return safely
-
-\- Avoid `go\_back()` (use controlled navigation)
-
-
-
-\### Flow:
-
-
-
-Assignments → Subject → Assignments → Next Subject
-
-
-
-\### Status:
-
-✔ Stable  
-
-✔ No navigation issues
-
-
-
-\---
-
-
-
-\## PHASE 3.2: Assignment Extraction ✅
-
-
-
-\### Goal:
-
-Extract assignment data from subject page
-
-
-
-\### Implementation:
-
-
-
-\- Navigate to subject page (Assignment.aspx)
-
-\- Locate assignment container
-
-\- Extract rows using:
-
-&#x20; tr.GreenPage2
-
-\- Extract per row:
-
-&#x20; - Assignment Number (index 2)
-
-&#x20; - Due Date (index 3)
-
-&#x20; - Status (button-based detection)
-
-
-
-\### Logic:
-
-
-
-\- Skip invalid rows
-
-\- Use index-based extraction (robust against layout issues)
-
-\- Handle dynamic DOM (non-standard table structure)
-
-
-
-\### Output Example:
-
-
-
-Assignment 05 | Due: 20-Apr-2026 | Status: Upload  
-
-Assignment 04 | Due: 13-Apr-2026 | Status: Date Expired  
-
-
-
-\### Status:
-
-
-
-✔ Assignment extraction working  
-
-✔ Multi-subject extraction working  
-
-⚠ Status detection partially working (buttons need better parsing — improvement pending)
-
-
-
-\---
-
-
-
-\## NEXT TASK (CURRENT FOCUS)
-
-
-
-\## 🚀 PHASE 3.3 → Download Assignments
-
-
-
-\### Goal:
-
-
-
-\- Automatically click "Download" button
-
-\- Save assignment files locally
-
-\- Organize by subject
-
-
-
-\---
-
-
-
-\## UPCOMING PHASES
-
-
-
-\### Phase 3.4 → AI Solve Assignments
-
-
-
-\- Process downloaded files
-
-\- Generate answers using AI
-
-
-
-\### Phase 3.5 → Upload Solutions
-
-
-
-\- Upload solved assignments automatically
-
-
-
-\---
-
-
-
-\## TECH STACK
-
-
-
-\- Python 3.14
-
-\- Playwright (sync API)
-
-
-
-\---
-
-
-
-\## FILES
-
-
-
-\- main.py → core automation logic
-
-\- requirements.txt → dependencies
-
-\- PROJECT\_CONTEXT.md → project state
-
-
-
-\---
-
-
-
-\## IMPORTANT RULES
-
-
-
-\- DO NOT modify Phase 1 logic
-
-\- DO NOT modify Phase 2 logic
-
-\- DO NOT modify Phase 3.1 logic
-
-\- DO NOT break working extraction logic in Phase 3.2
-
-\- Only extend functionality forward
-
-
-
-\---
-
-
-
-\## FINAL GOAL
-
-
-
-Build full automation pipeline:
-
-
-
-Login → Detect Subjects → Open Subject → Extract Assignments → Download → AI Solve → Upload
-
+---
