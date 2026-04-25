@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import pdfplumber
 import pytesseract
@@ -109,17 +110,42 @@ def clean_text(text: str) -> str:
 def extract_questions(text: str) -> list[str]:
     """Split text into questions using numbered-prefix pattern."""
     import re
-    pattern = r'(Q\.?\d+|\d{1,2})[\)\.\s]+'
+    text = text.replace("\r", "\n")
+    pattern = r'(?:Q\.?\s*\d+|\n\d{1,2}[).])'
     parts = re.split(pattern, text)
 
     questions = []
-    for i in range(1, len(parts) - 1, 2):
-        q_num = parts[i].strip()
-        q_text = parts[i + 1].strip()
-        if q_text:
-            questions.append(f"{q_num}. {q_text}")
+    for part in parts[1:]:  # parts[0] is preamble before first question
+        part = part.strip()
+        if part:
+            questions.append(part)
 
     return questions
+
+
+# ---------------------------------------------------------------------------
+# PHASE 3.5: AI Answer Generation (OpenRouter)
+# ---------------------------------------------------------------------------
+_OR_API_KEY = "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"
+
+
+def generate_answer(question: str) -> str:
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {_OR_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openai/gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": question}],
+            },
+        )
+        return response.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"  [AI ERROR] {e}")
+        return "Error generating answer"
 
 
 # ---------------------------------------------------------------------------
@@ -310,13 +336,27 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                     f.write(response.content)
                 print(f"  Downloaded: {filepath}")
 
-                # Phase 3.4: Extract and display questions
+                # Phase 3.4 + 3.5: Extract questions → AI answers → save
                 content = read_file_content(filepath)
                 if content:
                     questions = extract_questions(content)
-                    print("\n  [ASSIGNMENT QUESTIONS]")
-                    for q in questions:
-                        print(f"  {q}")
+
+                    subject_safe = subject_name.replace(" ", "_").replace("&", "and")
+                    ans_folder = f"answers/{subject_safe}"
+                    os.makedirs(ans_folder, exist_ok=True)
+                    ans_file = f"{ans_folder}/assignment_{assign_no}.txt"
+
+                    print(f"\n  === Assignment {assign_no} ===")
+                    with open(ans_file, "a", encoding="utf-8") as f:
+                        for q in questions:
+                            if len(q.strip()) < 8:
+                                continue
+                            print(f"\n  Q: {q}")
+                            answer = generate_answer(q)
+                            print(f"  A: {answer}")
+                            f.write(f"Q: {q}\nA: {answer}\n\n")
+                            time.sleep(2)
+                    print(f"\n  Answers saved → {ans_file}")
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
 
