@@ -1,5 +1,6 @@
 # Ignore downloaded files
 downloads/
+answers/
 
 # Optional (good practice)
 __pycache__/
