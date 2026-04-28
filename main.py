@@ -145,6 +145,28 @@ def generate_answer(question: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# PHASE 3.6: Upload generated answer file to portal
+# ---------------------------------------------------------------------------
+def upload_assignment(page, file_path: str) -> None:
+    try:
+        print(f"  [3.6] Uploading: {file_path}")
+        page.locator("a:has-text('Upload'):visible").first.click()
+
+        page.wait_for_selector("input[type='file']", timeout=10000)
+        page.set_input_files("input[type='file']", file_path)
+        page.click("input[type='submit']")
+        page.wait_for_load_state("networkidle")
+
+        print("  [3.6] Upload successful")
+
+        # Navigate back to subject page so the assignment loop can continue
+        page.go_back()
+        page.wait_for_load_state("domcontentloaded")
+    except Exception as e:
+        print(f"  [3.6] Upload failed: {e}")
+
+
+# ---------------------------------------------------------------------------
 def login(page) -> None:
     """Open the login page, fill credentials, submit, and confirm login."""
     print("[1/4] Navigating to login page...")
@@ -353,6 +375,9 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                             f.write(f"Q: {q}\nA: {answer}\n\n")
                             time.sleep(2)
                     print(f"\n  Answers saved → {ans_file}")
+
+                    # Phase 3.6: Upload answer file to portal
+                    upload_assignment(page, os.path.abspath(ans_file))
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
 
