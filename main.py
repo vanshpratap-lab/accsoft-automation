@@ -5,9 +5,11 @@ import pdfplumber
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 from PIL import Image
-from docx import Document
+from dotenv import load_dotenv
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # CONFIG — fill in your real credentials
@@ -77,22 +79,6 @@ def read_file_content(filepath: str) -> str:
                 print("  [WARN] No readable content extracted from PDF")
             return clean_text(text)
 
-        if ext.endswith(".docx"):
-            doc = Document(filepath)
-            parts = []
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    parts.append(para.text.strip())
-            for table in doc.tables:
-                for row in table.rows:
-                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                    if row_text:
-                        parts.append(" | ".join(row_text))
-            text = "\n".join(parts)
-            if not text.strip():
-                print("  [WARN] No readable content extracted from DOCX")
-            return clean_text(text)
-
         if ext.endswith((".jpg", ".jpeg", ".png")):
             return extract_image_text(filepath)
 
@@ -126,23 +112,33 @@ def extract_questions(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # PHASE 3.5: AI Answer Generation (OpenRouter)
 # ---------------------------------------------------------------------------
-_OR_API_KEY = "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"
+_OR_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 
 def generate_answer(question: str) -> str:
+    if not _OR_API_KEY:
+        print("  [AI ERROR] OPENROUTER_API_KEY is missing from .env — skipping answer generation")
+        return "Error generating answer"
     try:
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {_OR_API_KEY}",
                 "Content-Type": "application/json",
+                "HTTP-Referer": "https://accsoft.piemr.edu.in",
+                "X-Title": "Accsoft Automation",
             },
             json={
                 "model": "openai/gpt-3.5-turbo",
                 "messages": [{"role": "user", "content": question}],
             },
+            timeout=30,
         )
-        return response.json()["choices"][0]["message"]["content"]
+        data = response.json()
+        if "error" in data:
+            print(f"  [AI API ERROR] {data['error'].get('message', data['error'])}")
+            return "Error generating answer"
+        return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"  [AI ERROR] {e}")
         return "Error generating answer"
