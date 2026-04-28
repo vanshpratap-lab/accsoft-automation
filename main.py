@@ -6,6 +6,9 @@ import pytesseract
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 from PIL import Image
 from dotenv import load_dotenv
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -142,6 +145,30 @@ def generate_answer(question: str) -> str:
     except Exception as e:
         print(f"  [AI ERROR] {e}")
         return "Error generating answer"
+
+
+# ---------------------------------------------------------------------------
+# PHASE 3.5b: Convert .txt answer file to PDF for upload
+# ---------------------------------------------------------------------------
+def convert_txt_to_pdf(txt_path: str) -> str:
+    pdf_path = txt_path.replace(".txt", ".pdf")
+    try:
+        styles = getSampleStyleSheet()
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+        content = []
+        with open(txt_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip()
+                if line:
+                    content.append(Paragraph(line, styles["Normal"]))
+                else:
+                    content.append(Spacer(1, 8))
+        doc.build(content)
+        print(f"  [3.5b] PDF created: {pdf_path}")
+        return pdf_path
+    except Exception as e:
+        print(f"  [3.5b] PDF conversion failed: {e} — falling back to txt")
+        return txt_path
 
 
 # ---------------------------------------------------------------------------
@@ -376,8 +403,9 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                             time.sleep(2)
                     print(f"\n  Answers saved → {ans_file}")
 
-                    # Phase 3.6: Upload answer file to portal
-                    upload_assignment(page, os.path.abspath(ans_file))
+                    # Phase 3.5b → 3.6: Convert to PDF then upload
+                    pdf_file = convert_txt_to_pdf(ans_file)
+                    upload_assignment(page, os.path.abspath(pdf_file))
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
 
