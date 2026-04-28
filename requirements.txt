@@ -1,7 +1,8 @@
 playwright
 requests
 pdfplumber
-python-docx
 pytesseract
 Pillow
 pdf2image
+reportlab
+python-dotenv

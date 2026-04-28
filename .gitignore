@@ -2,6 +2,9 @@
 downloads/
 answers/
 
+# Secret credentials — never commit
+.env
+
 # Optional (good practice)
 __pycache__/
 *.pyc
