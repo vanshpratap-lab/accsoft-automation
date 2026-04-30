@@ -1,5 +1,6 @@
 import os
 import time
+import subprocess
 import requests
 import pdfplumber
 import pytesseract
@@ -169,6 +170,29 @@ def convert_txt_to_pdf(txt_path: str) -> str:
     except Exception as e:
         print(f"  [3.5b] PDF conversion failed: {e} — falling back to txt")
         return txt_path
+
+
+_HW_SCRIPT = r"C:\Users\Hp\Desktop\text-to-handwriting\generate.js"
+
+
+def generate_handwritten_pdf(txt_path: str) -> str:
+    pdf_path = txt_path.replace(".txt", ".pdf")
+    png_path = txt_path.replace(".txt", ".png")
+    try:
+        result = subprocess.run(
+            ["node", _HW_SCRIPT, txt_path, png_path],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip())
+
+        img = Image.open(png_path).convert("RGB")
+        img.save(pdf_path, "PDF", resolution=150)
+        print(f"  [3.5b] Handwritten PDF created: {pdf_path}")
+        return pdf_path
+    except Exception as e:
+        print(f"  [3.5b] Handwritten generation failed: {e} — using plain PDF fallback")
+        return convert_txt_to_pdf(txt_path)
 
 
 # ---------------------------------------------------------------------------
@@ -361,11 +385,18 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         if not assign_no or not due_date:
             continue
 
-        status_norm = status.lower().strip()
-        print(f"  Status: {status_norm}")
+        btn_locator = row.locator("button, input[type='button'], input[type='submit'], a.btn")
+        button_text = ""
+        if btn_locator.count() > 0:
+            button_text = btn_locator.first.inner_text().lower().strip()
 
-        if any(kw in status_norm for kw in ("upload", "submitted", "done")):
-            print(f"  Skipping already uploaded assignment: {assign_no}")
+        print(f"  Button: '{button_text}', Status: '{status}'")
+
+        if "re-upload" in button_text:
+            print(f"  Skipping already submitted assignment: {assign_no}")
+            continue
+        elif "uploaded" in status:
+            print(f"  Skipping already submitted assignment: {assign_no}")
             continue
 
         total_assignments += 1
@@ -410,8 +441,8 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                             time.sleep(2)
                     print(f"\n  Answers saved → {ans_file}")
 
-                    # Phase 3.5b → 3.6: Convert to PDF then upload
-                    pdf_file = convert_txt_to_pdf(ans_file)
+                    # Phase 3.5b → 3.6: Handwritten PDF then upload (fallback: plain PDF)
+                    pdf_file = generate_handwritten_pdf(ans_file)
                     upload_assignment(page, os.path.abspath(pdf_file))
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
