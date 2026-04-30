@@ -349,16 +349,23 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         assign_no = texts[2]
         due_date  = texts[3]
 
-        status_cell = cells.nth(cell_count - 1)
+        status_cell = row.locator("td[data-label='Assignment Status']")
         status = status_cell.inner_text().strip()
         if not status:
-            btn = status_cell.locator("button, input, a")
-            if btn.count() > 0:
-                status = btn.first.inner_text().strip()
+            status = status_cell.text_content().strip()
+        status = status.lower()
         if not status:
-            status = "Unknown"
+            status = "unknown"
+        print(f"  Raw status extracted: {status}")
 
         if not assign_no or not due_date:
+            continue
+
+        status_norm = status.lower().strip()
+        print(f"  Status: {status_norm}")
+
+        if any(kw in status_norm for kw in ("upload", "submitted", "done")):
+            print(f"  Skipping already uploaded assignment: {assign_no}")
             continue
 
         total_assignments += 1
