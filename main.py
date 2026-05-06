@@ -361,11 +361,14 @@ def extract_subject_assignments(page, subject_name: str) -> None:
     print(f"\n  Subject: {subject_name}")
 
     for i in range(count):
+        print(f"  [DEBUG] Loop row index: {i}")
         row = rows.nth(i)
         cells = row.locator("td")
         cell_count = cells.count()
 
+        print(f"  [DEBUG] Cell count for row {i}: {cell_count}")
         if cell_count < 5:
+            print(f"  [DEBUG] Row {i} skipped — fewer than 5 cells")
             continue
 
         texts = [cells.nth(j).inner_text().strip() for j in range(cell_count)]
@@ -373,34 +376,31 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         assign_no = texts[2]
         due_date  = texts[3]
 
-        status_cell = row.locator("td[data-label='Assignment Status']")
-        status = status_cell.inner_text().strip()
-        if not status:
-            status = status_cell.text_content().strip()
-        status = status.lower()
-        if not status:
-            status = "unknown"
-        print(f"  Raw status extracted: {status}")
-
+        print(f"  [DEBUG] assign_no='{assign_no}' due_date='{due_date}'")
         if not assign_no or not due_date:
+            print(f"  [DEBUG] Row {i} skipped — missing assign_no or due_date")
             continue
 
-        btn_locator = row.locator("button, input[type='button'], input[type='submit'], a.btn")
+        upload_link = row.locator("a:has-text('Upload'), a:has-text('Re-Upload')")
         button_text = ""
-        if btn_locator.count() > 0:
-            button_text = btn_locator.first.inner_text().lower().strip()
+        if upload_link.count() > 0:
+            try:
+                button_text = upload_link.first.inner_text().strip().lower()
+            except Exception:
+                button_text = ""
 
-        print(f"  Button: '{button_text}', Status: '{status}'")
+        print(f"  [DEBUG] Upload button text: '{button_text}'")
 
-        if "re-upload" in button_text:
+        already_submitted = "re-upload" in button_text
+        print(f"  [DEBUG] Already submitted: {already_submitted}")
+
+        if already_submitted:
             print(f"  Skipping already submitted assignment: {assign_no}")
-            continue
-        elif "uploaded" in status:
-            print(f"  Skipping already submitted assignment: {assign_no}")
+            print("  [DEBUG] Continuing to next row...")
             continue
 
         total_assignments += 1
-        print(f"  Assignment {assign_no} | Due: {due_date} | Status: {status}")
+        print(f"  Assignment {assign_no} | Due: {due_date} | Button: '{button_text}'")
 
         # Phase 3.3: Download assignment file (direct URL — skips postback link)
         os.makedirs("downloads", exist_ok=True)
