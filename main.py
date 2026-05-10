@@ -259,44 +259,85 @@ def navigate_to_assignments(page) -> None:
 
 def _scan_subject_rows(page) -> list[dict]:
     """
-    First pass: scan the assignments table and return a list of dicts for
-    rows where new-assignment count > 0.
+    Phase 2: two-pass subject detection.
 
-    Each dict holds:
-      - subject:   display name
-      - row_index: position in "table tr" (used to re-locate after go_back)
+    Pass 1 — collect subjects where the count column > 0.
+    Pass 2 — navigate into each candidate and confirm at least one assignment
+              has a visible 'Upload' anchor (not 'Re-Upload').
+
+    Only subjects with a real pending upload are returned.
     """
     rows = page.locator("table tr")
     row_count = rows.count()
 
-    # subject_name → {total_new, first_row_index}
-    seen: dict[str, dict] = {}
-
+    # Pass 1: fast scan of count column
+    candidates: list[dict] = []
     for i in range(row_count):
         cells = rows.nth(i).locator("td")
         if cells.count() != 5:
             continue
-
         subject_name = cells.nth(1).inner_text().strip()
         new_count_text = cells.nth(2).inner_text().strip()
-
         if not subject_name:
             continue
-
         try:
             new_count = int(new_count_text)
         except ValueError:
             new_count = 0
+        if new_count > 0 and not any(c["subject"] == subject_name for c in candidates):
+            candidates.append({"subject": subject_name, "row_index": i})
 
-        if subject_name not in seen:
-            seen[subject_name] = {"total_new": 0, "first_row_index": i}
-        seen[subject_name]["total_new"] += new_count
+    print(f"[DEBUG P2] Candidate subjects (count > 0): {[c['subject'] for c in candidates]}")
 
-    return [
-        {"subject": name, "row_index": info["first_row_index"]}
-        for name, info in seen.items()
-        if info["total_new"] > 0
-    ]
+    # Pass 2: navigate into each candidate and verify real Upload button exists
+    targets: list[dict] = []
+    for candidate in candidates:
+        subject = candidate["subject"]
+        row_index = candidate["row_index"]
+        print(f"[DEBUG P2] Verifying: {subject}")
+
+        try:
+            rows_fresh = page.locator("table tr")
+            row = rows_fresh.nth(row_index)
+            view_button = row.locator("td").nth(2).locator("a, button")
+            if view_button.count() == 0:
+                view_button = row.locator("a, button").first
+            view_button.click()
+            page.wait_for_load_state("domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2000)
+
+            container = page.locator("#ctl00_ContentPlaceHolder1_DataList2")
+            assign_rows = container.locator("tr.GreenPage2")
+            if assign_rows.count() == 0:
+                page.wait_for_timeout(3000)
+                assign_rows = container.locator("tr.GreenPage2")
+
+            subject_has_pending = False
+            for j in range(assign_rows.count()):
+                upload_link = assign_rows.nth(j).locator("a:has-text('Upload'), a:has-text('Re-Upload')")
+                if upload_link.count() > 0:
+                    try:
+                        button_text = upload_link.first.inner_text().strip().lower()
+                    except Exception:
+                        button_text = ""
+                    print(f"[DEBUG P2] Subject row button text: '{button_text}'")
+                    if button_text == "upload":
+                        subject_has_pending = True
+                        break
+
+            if subject_has_pending:
+                print(f"[DEBUG P2] {subject} → CONFIRMED pending Upload")
+                targets.append(candidate)
+            else:
+                print(f"[DEBUG P2] {subject} → no real pending Upload — SKIPPED")
+
+        except Exception as e:
+            print(f"[DEBUG P2] Error verifying {subject}: {e}")
+        finally:
+            _return_to_assignments(page)
+            page.wait_for_timeout(1000)
+
+    return targets
 
 
 def extract_assignments(page) -> list[dict]:
