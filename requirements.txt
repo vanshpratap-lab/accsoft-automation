@@ -6,3 +6,4 @@ Pillow
 pdf2image
 reportlab
 python-dotenv
+python-docx

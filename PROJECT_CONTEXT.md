@@ -8,7 +8,9 @@ PROJECT_CONTEXT.md
 
 ## CURRENT STATUS
 
-Project has successfully completed Phase 3.4 (Assignment Extraction).
+Project has an end-to-end implementation through answer upload. The current
+Ubuntu configuration uses the standard PDF output path; handwritten PDF output
+is intentionally deferred until its replacement API/integration is available.
 
 Automation pipeline is now able to:
 
@@ -18,6 +20,8 @@ Automation pipeline is now able to:
 * Extract assignment metadata
 * Download assignment files
 * Extract readable content from files (PDF, DOCX, Images via OCR)
+* Generate AI answers through OpenRouter
+* Create a standard answer PDF and upload it to the portal
 
 ---
 
@@ -158,16 +162,22 @@ Q3 ...
 
 ---
 
-## NEXT PHASE
+## CURRENT WORK
 
-### Phase 3.5: AI-Based Assignment Solving
+### Reliability fixes
 
-Goal:
-
-* Take extracted questions
-* Send to AI model
-* Generate answers
-* Prepare for upload
+* Download assignment files through the logged-in browser session and reject
+  portal HTML/error pages before extraction.
+* Re-find each subject by name after navigation so changing assignment counts
+  do not cause the next subject to open by a stale row index.
+* Return to the saved subject URL after upload instead of relying on browser
+  history.
+* Confirm that a submitted assignment changes to `Re-Upload` before reporting
+  upload success.
+* Skip PDF creation and upload when no usable questions are extracted from an
+  assignment file.
+* Keep browser automation visible during runs.
+* Use standard PDF output until handwritten PDF generation is reintroduced.
 
 ---
 
@@ -182,10 +192,6 @@ Login → Detect → Open → Extract → Download → Read → Solve → Upload
 ## NOTES FOR NEXT SESSION
 
 * System is stable and functional
-* Focus next on:
-
-  * AI integration
-  * Answer generation
-  * Output formatting for submission
+* Focus next on download reliability and question extraction on Ubuntu.
 
 ---

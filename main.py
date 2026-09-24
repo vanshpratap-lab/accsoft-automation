@@ -4,7 +4,7 @@ import subprocess
 import requests
 import pdfplumber
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from urllib.parse import unquote, urljoin, urlparse
 from PIL import Image
 from dotenv import load_dotenv
 from reportlab.lib.pagesizes import A4
@@ -14,6 +14,27 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 load_dotenv()
+
+
+# ---------------------------------------------------------------------------
+# EXTERNAL TOOL PATHS — override via .env, with sensible defaults
+# ---------------------------------------------------------------------------
+def _configure_tesseract() -> None:
+    """Point pytesseract at the Tesseract binary.
+
+    Priority: TESSERACT_CMD from .env -> common Windows default -> system PATH.
+    """
+    for candidate in (
+        os.getenv("TESSERACT_CMD", ""),
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    ):
+        if candidate and os.path.isfile(candidate):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            return
+
+
+_configure_tesseract()
+
 
 # ---------------------------------------------------------------------------
 # CONFIG — fill in your real credentials
@@ -69,6 +90,25 @@ def extract_image_text(path: str) -> str:
         return ""
 
 
+def extract_docx_text(path: str) -> str:
+    """Extract text (paragraphs + table cells) from a .docx file."""
+    try:
+        import docx
+    except ImportError:
+        print("  [DOCX ERROR] python-docx is not installed — run: pip install python-docx")
+        return ""
+    try:
+        document = docx.Document(path)
+        parts = [p.text for p in document.paragraphs]
+        for table in document.tables:
+            for row in table.rows:
+                parts.extend(cell.text for cell in row.cells)
+        return "\n".join(parts)
+    except Exception as e:
+        print(f"  [DOCX ERROR] {e}")
+        return ""
+
+
 def read_file_content(filepath: str) -> str:
     """Extract text from PDF, DOCX, or image. OCR fallback for image-based PDFs."""
     try:
@@ -85,6 +125,13 @@ def read_file_content(filepath: str) -> str:
 
         if ext.endswith((".jpg", ".jpeg", ".png")):
             return extract_image_text(filepath)
+
+        if ext.endswith(".docx"):
+            return clean_text(extract_docx_text(filepath))
+
+        if ext.endswith(".doc"):
+            print("  [warn] Legacy .doc not supported — convert to .docx first")
+            return ""
 
         return ""
     except Exception as e:
@@ -111,6 +158,39 @@ def extract_questions(text: str) -> list[str]:
             questions.append(part)
 
     return questions
+
+
+# ---------------------------------------------------------------------------
+# PHASE 3.3: Authenticated assignment-file download
+# ---------------------------------------------------------------------------
+def download_assignment_file(page, relative_url: str) -> str:
+    """Download an assignment through the logged-in Playwright context.
+
+    A standalone requests.get call has no portal session cookies, so the portal
+    can return its login/error HTML instead of the attachment. Browser-context
+    requests share the authenticated session with the visible browser.
+    """
+    full_url = urljoin(page.url, relative_url)
+    filename = unquote(os.path.basename(urlparse(full_url).path)) or "assignment_file"
+    filepath = os.path.join("downloads", filename)
+
+    response = page.context.request.get(full_url, timeout=60000)
+    if not response.ok:
+        raise RuntimeError(f"Server returned HTTP {response.status}")
+
+    body = response.body()
+    content_type = response.headers.get("content-type", "").lower()
+    looks_like_html = (
+        "text/html" in content_type
+        or body.lstrip().lower().startswith((b"<!doctype html", b"<html"))
+    )
+    if not body or looks_like_html:
+        raise RuntimeError("Portal returned an HTML/login page instead of the assignment file")
+
+    with open(filepath, "wb") as f:
+        f.write(body)
+    print(f"  Downloaded: {filepath}")
+    return filepath
 
 
 # ---------------------------------------------------------------------------
@@ -165,14 +245,19 @@ def convert_txt_to_pdf(txt_path: str) -> str:
                 else:
                     content.append(Spacer(1, 8))
         doc.build(content)
+        if not os.path.isfile(pdf_path) or os.path.getsize(pdf_path) == 0:
+            raise RuntimeError("PDF file was not created or is empty")
         print(f"  [3.5b] PDF created: {pdf_path}")
         return pdf_path
     except Exception as e:
-        print(f"  [3.5b] PDF conversion failed: {e} — falling back to txt")
-        return txt_path
+        print(f"  [3.5b] PDF conversion failed: {e}")
+        return ""
 
 
-_HW_SCRIPT = r"C:\Users\Hp\Desktop\text-to-handwriting\generate.js"
+_HW_SCRIPT = os.getenv(
+    "HANDWRITING_SCRIPT",
+    r"C:\Users\Hp\Desktop\text-to-handwriting\generate.js",
+)
 
 
 def generate_handwritten_pdf(txt_path: str) -> str:
@@ -198,9 +283,10 @@ def generate_handwritten_pdf(txt_path: str) -> str:
 # ---------------------------------------------------------------------------
 # PHASE 3.6: Upload generated answer file to portal
 # ---------------------------------------------------------------------------
-def upload_assignment(page, file_path: str) -> None:
+def upload_assignment(page, file_path: str, assignment_no: str) -> None:
     try:
         print(f"  [3.6] Uploading: {file_path}")
+        subject_url = page.url
         page.locator("a:has-text('Upload'):visible").first.click()
 
         page.wait_for_selector("input[type='file']", timeout=10000)
@@ -208,11 +294,26 @@ def upload_assignment(page, file_path: str) -> None:
         page.click("input[type='submit']")
         page.wait_for_load_state("networkidle")
 
-        print("  [3.6] Upload successful")
+        # Return to the known subject URL instead of relying on browser history.
+        page.goto(subject_url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_selector("#ctl00_ContentPlaceHolder1_DataList2", timeout=15000)
 
-        # Navigate back to subject page so the assignment loop can continue
-        page.go_back()
-        page.wait_for_load_state("domcontentloaded")
+        upload_confirmed = False
+        assignment_rows = page.locator("#ctl00_ContentPlaceHolder1_DataList2 tr.GreenPage2")
+        for i in range(assignment_rows.count()):
+            row = assignment_rows.nth(i)
+            cells = row.locator("td")
+            if cells.count() < 3 or cells.nth(2).inner_text().strip() != assignment_no:
+                continue
+            button = row.locator("a:has-text('Upload'), a:has-text('Re-Upload')")
+            if button.count() and button.first.inner_text().strip().lower() == "re-upload":
+                upload_confirmed = True
+            break
+
+        if upload_confirmed:
+            print(f"  [3.6] Upload confirmed for assignment {assignment_no}")
+        else:
+            print(f"  [3.6] WARNING: upload was submitted but not confirmed for assignment {assignment_no}")
     except Exception as e:
         print(f"  [3.6] Upload failed: {e}")
 
@@ -443,7 +544,7 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         total_assignments += 1
         print(f"  Assignment {assign_no} | Due: {due_date} | Button: '{button_text}'")
 
-        # Phase 3.3: Download assignment file (direct URL — skips postback link)
+        # Phase 3.3: Download through the authenticated browser session.
         os.makedirs("downloads", exist_ok=True)
         download_link = row.locator('a[href*="Upload/Assignment"]')
         if download_link.count() == 0:
@@ -451,19 +552,18 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         else:
             try:
                 relative_url = download_link.first.get_attribute("href")
-                base_url = "https://accsoft.piemr.edu.in/accsoft_piemr/"
-                full_url = base_url + relative_url.replace("../", "")
-                response = requests.get(full_url)
-                filename = full_url.split("/")[-1]
-                filepath = f"downloads/{filename}"
-                with open(filepath, "wb") as f:
-                    f.write(response.content)
-                print(f"  Downloaded: {filepath}")
+                if not relative_url:
+                    raise RuntimeError("Assignment download link has no URL")
+                filepath = download_assignment_file(page, relative_url)
 
                 # Phase 3.4 + 3.5: Extract questions → AI answers → save
                 content = read_file_content(filepath)
                 if content:
                     questions = extract_questions(content)
+                    valid_questions = [q for q in questions if len(q.strip()) >= 8]
+                    if not valid_questions:
+                        print(f"  [WARN] No valid questions extracted for {assign_no} — skipping PDF and upload")
+                        continue
 
                     subject_safe = subject_name.replace(" ", "_").replace("&", "and")
                     ans_folder = f"answers/{subject_safe}"
@@ -472,9 +572,7 @@ def extract_subject_assignments(page, subject_name: str) -> None:
 
                     print(f"\n  === Assignment {assign_no} ===")
                     with open(ans_file, "a", encoding="utf-8") as f:
-                        for q in questions:
-                            if len(q.strip()) < 8:
-                                continue
+                        for q in valid_questions:
                             print(f"\n  Q: {q}")
                             answer = generate_answer(q)
                             print(f"  A: {answer}")
@@ -482,9 +580,15 @@ def extract_subject_assignments(page, subject_name: str) -> None:
                             time.sleep(2)
                     print(f"\n  Answers saved → {ans_file}")
 
-                    # Phase 3.5b → 3.6: Handwritten PDF then upload (fallback: plain PDF)
-                    pdf_file = generate_handwritten_pdf(ans_file)
-                    upload_assignment(page, os.path.abspath(pdf_file))
+                    # Phase 3.5b → 3.6: use the reliable plain-PDF path.
+                    # Handwritten output is intentionally deferred for now.
+                    pdf_file = convert_txt_to_pdf(ans_file)
+                    if pdf_file:
+                        upload_assignment(page, os.path.abspath(pdf_file), assign_no)
+                    else:
+                        print("  [3.6] Upload skipped because answer PDF generation failed")
+                else:
+                    print(f"  [WARN] No readable assignment content for {assign_no} — skipping PDF and upload")
             except Exception as e:
                 print(f"  [warn] Download failed for {assign_no}: {e}")
 
@@ -492,6 +596,33 @@ def extract_subject_assignments(page, subject_name: str) -> None:
         print("  No assignments found.")
 
     print(f"  Total assignments found: {total_assignments}")
+
+
+def _open_subject_by_name(page, subject_name: str) -> None:
+    """Open a subject from a freshly rendered assignments table.
+
+    Assignment counts can change after an upload, which makes a previously
+    stored row index unreliable. Matching the visible subject name avoids
+    accidentally opening the wrong row on later iterations.
+    """
+    rows = page.locator("table tr")
+    for i in range(rows.count()):
+        row = rows.nth(i)
+        cells = row.locator("td")
+        if cells.count() != 5:
+            continue
+        if cells.nth(1).inner_text().strip() != subject_name:
+            continue
+
+        view_button = row.locator("td").nth(2).locator("a, button")
+        if view_button.count() == 0:
+            view_button = row.locator("a, button").first
+        if view_button.count() == 0:
+            raise RuntimeError(f"No view button found for subject: {subject_name}")
+        view_button.click()
+        return
+
+    raise RuntimeError(f"Subject not found in assignments table: {subject_name}")
 
 
 def open_subjects(page, targets: list[dict]) -> None:
@@ -510,17 +641,9 @@ def open_subjects(page, targets: list[dict]) -> None:
 
     for t in targets:
         subject = t["subject"]
-        row_index = t["row_index"]
-
-        # Re-fetch rows fresh (DOM may differ after each navigation)
-        rows = page.locator("table tr")
-        row = rows.nth(row_index)
 
         print(f"  Clicking subject: {subject} ...")
-        view_button = row.locator("td").nth(2).locator("a, button")
-        if view_button.count() == 0:
-            view_button = row.locator("a, button").first
-        view_button.click()
+        _open_subject_by_name(page, subject)
         print("  Clicked correct subject view button")
 
         page.wait_for_load_state("domcontentloaded", timeout=60000)
