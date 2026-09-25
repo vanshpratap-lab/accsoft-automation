@@ -133,6 +133,12 @@ Q3 ...
 * requirements.txt → dependencies
 * downloads/ → saved assignment files (ignored in git)
 
+The Linux MVP now also supports `setup`, `run`, `test`, `status`, `enable`, and
+`disable` command modes. Credentials are stored through the OS keyring when configured,
+and the daily schedule is stored under the user's XDG configuration directory. Ubuntu
+user-level systemd unit generation is implemented; the timer is enabled only when the
+customer explicitly runs the `enable` command.
+
 ---
 
 ## TECH STACK
@@ -192,6 +198,6 @@ Login → Detect → Open → Extract → Download → Read → Solve → Upload
 ## NOTES FOR NEXT SESSION
 
 * System is stable and functional
-* Focus next on download reliability and question extraction on Ubuntu.
+* Focus next on validating the scheduled Linux run and adding reliable local logs.
 
 ---
