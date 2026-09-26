@@ -32,11 +32,15 @@ accsoft-agent test       # safe validation; upload disabled
 accsoft-agent run        # one immediate full run
 accsoft-agent status     # configuration and last-run summary
 accsoft-agent enable     # install/enable the daily schedule
+accsoft-agent enable-test # enable a scheduled safe test run
 accsoft-agent disable    # pause the daily schedule
 ```
 
 The scheduled task runs without the customer opening a terminal. It starts the browser,
 performs the existing workflow, records the result, and exits.
+
+Before enabling a real schedule, `enable-test` can be used to validate the timer. Its
+scheduled process uses test mode and cannot download, generate, or upload answers.
 
 ## Explicit safety behavior
 

@@ -22,14 +22,17 @@ Completed:
 - Added `run`, `test`, and `status` command modes.
 - Added a `setup` mode that stores Accsoft credentials in the operating-system keyring.
 - Added daily schedule storage and Ubuntu user-level `systemd` enable/disable commands.
+- Added private local run logs and `enable-test` for safe scheduled validation.
 
 In progress:
 
-- Nothing.
+- Investigate one subject's alternate `AssignmentView.aspx` page, which did not expose
+  the normal assignment table during safe testing.
 
 Next task:
 
-- Add local schedule configuration and Ubuntu systemd timer management.
+- Investigate and handle the alternate assignment page without changing the normal
+  subject workflow.
 
 ## Phase roadmap
 
@@ -53,6 +56,8 @@ Next task:
 - [x] Add keyring-backed credential setup.
 - [x] Add explicit command modes: setup, test, run, and status.
 - [x] Add Ubuntu scheduling and local logs.
+- [x] Verify login, assignment detection, subject navigation, and safe inspection on the
+  Ubuntu desktop.
 - [ ] Preserve and verify the current login/download/read/solve/upload behavior.
 
 ### Phase 3 — Packaging and reliability

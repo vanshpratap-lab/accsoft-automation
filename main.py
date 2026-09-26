@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 import getpass
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -25,9 +26,27 @@ KEYRING_SERVICE = "accsoft-automation"
 APP_NAME = "accsoft-automation"
 CONFIG_DIR = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / APP_NAME
 SCHEDULE_CONFIG_PATH = CONFIG_DIR / "schedule.toml"
+STATE_DIR = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state")) / APP_NAME
+LOG_PATH = STATE_DIR / "agent.log"
 SYSTEMD_USER_DIR = Path.home() / ".config" / "systemd" / "user"
 SYSTEMD_SERVICE_NAME = f"{APP_NAME}.service"
 SYSTEMD_TIMER_NAME = f"{APP_NAME}.timer"
+LOGGER = logging.getLogger(APP_NAME)
+
+
+def _configure_logging() -> None:
+    """Configure a private local log without recording secrets or portal responses."""
+    if not LOGGER.handlers:
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+            os.chmod(LOG_PATH, 0o600)
+        except OSError as error:
+            handler = logging.StreamHandler()
+            print(f"  [LOG WARN] Local log unavailable; using console logging: {error}")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        LOGGER.addHandler(handler)
+        LOGGER.setLevel(logging.INFO)
 
 
 def _read_keyring_secret(name: str) -> str:
@@ -769,7 +788,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "mode",
         nargs="?",
-        choices=("run", "test", "status", "setup", "enable", "disable"),
+        choices=("run", "test", "status", "setup", "enable", "enable-test", "disable"),
         default="run",
         help="run, inspect safely, show status, or configure credentials",
     )
@@ -841,7 +860,7 @@ def _save_schedule_time(schedule_time: str) -> None:
     os.chmod(SCHEDULE_CONFIG_PATH, 0o600)
 
 
-def _systemd_unit_contents(schedule_time: str) -> tuple[str, str]:
+def _systemd_unit_contents(schedule_time: str, mode: str = "run") -> tuple[str, str]:
     script_path = Path(__file__).resolve()
     service = f"""[Unit]
 Description=Accsoft Automation daily run
@@ -849,7 +868,7 @@ Description=Accsoft Automation daily run
 [Service]
 Type=oneshot
 WorkingDirectory={script_path.parent}
-ExecStart={sys.executable} {script_path} run --scheduled
+ExecStart={sys.executable} {script_path} {mode} --scheduled
 """
     timer = f"""[Unit]
 Description=Run Accsoft Automation daily at {schedule_time}
@@ -874,16 +893,18 @@ def _run_systemctl(*arguments: str, check: bool = True) -> subprocess.CompletedP
     )
 
 
-def _enable_schedule() -> None:
+def _enable_schedule(dry_run: bool = False) -> None:
     schedule_time = _load_schedule_time()
-    service_contents, timer_contents = _systemd_unit_contents(schedule_time)
+    mode = "test" if dry_run else "run"
+    service_contents, timer_contents = _systemd_unit_contents(schedule_time, mode=mode)
     SYSTEMD_USER_DIR.mkdir(parents=True, exist_ok=True)
     (SYSTEMD_USER_DIR / SYSTEMD_SERVICE_NAME).write_text(service_contents, encoding="utf-8")
     (SYSTEMD_USER_DIR / SYSTEMD_TIMER_NAME).write_text(timer_contents, encoding="utf-8")
 
     _run_systemctl("daemon-reload")
     _run_systemctl("enable", "--now", SYSTEMD_TIMER_NAME)
-    print(f"Daily schedule enabled for {schedule_time}.")
+    label = "safe test" if dry_run else "full run"
+    print(f"Daily {label} schedule enabled for {schedule_time}.")
 
 
 def _disable_schedule() -> None:
@@ -903,27 +924,34 @@ def _print_status() -> None:
     print(f"  Downloads directory: {DOWNLOADS_DIR}")
     print(f"  Answers directory: {ANSWERS_DIR}")
     print(f"  Daily schedule: {_load_schedule_time()}")
+    print(f"  Log file: {LOG_PATH}")
 
 
 def main() -> None:
     args = _parse_args()
+    _configure_logging()
+    LOGGER.info("command started mode=%s scheduled=%s", args.mode, args.scheduled)
 
     if args.mode == "setup":
         _setup_local_credentials()
+        LOGGER.info("setup completed")
         return
 
     _validate_configuration()
 
     if args.mode == "status":
         _print_status()
+        LOGGER.info("status completed")
         return
 
-    if args.mode == "enable":
-        _enable_schedule()
+    if args.mode in ("enable", "enable-test"):
+        _enable_schedule(dry_run=args.mode == "enable-test")
+        LOGGER.info("schedule enabled mode=%s", "test" if args.mode == "enable-test" else "run")
         return
 
     if args.mode == "disable":
         _disable_schedule()
+        LOGGER.info("schedule disabled")
         return
 
     with sync_playwright() as p:
@@ -937,10 +965,13 @@ def main() -> None:
             open_subjects(page, targets, dry_run=args.mode == "test")
             print("\nPhase 3.2 complete. Browser stays open for 5 seconds...")
             page.wait_for_timeout(BROWSER_CLOSE_DELAY_MS)
+            LOGGER.info("automation completed mode=%s subjects=%d", args.mode, len(targets))
         except Exception as e:
+            LOGGER.exception("automation failed mode=%s", args.mode)
             print(f"\n[ERROR] {e}")
             raise
         finally:
+            LOGGER.info("command finished mode=%s", args.mode)
             browser.close()
 
 

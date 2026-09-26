@@ -133,11 +133,16 @@ Q3 ...
 * requirements.txt → dependencies
 * downloads/ → saved assignment files (ignored in git)
 
-The Linux MVP now also supports `setup`, `run`, `test`, `status`, `enable`, and
-`disable` command modes. Credentials are stored through the OS keyring when configured,
-and the daily schedule is stored under the user's XDG configuration directory. Ubuntu
-user-level systemd unit generation is implemented; the timer is enabled only when the
-customer explicitly runs the `enable` command.
+The Linux MVP now also supports `setup`, `run`, `test`, `status`, `enable`,
+`enable-test`, and `disable` command modes. Credentials are stored through the OS
+keyring when configured, and the daily schedule is stored under the user's XDG
+configuration directory. Ubuntu user-level systemd unit generation is implemented; the
+timer is enabled only when the customer explicitly runs an enable command. `enable-test`
+creates a scheduled test run that does not download, generate, or upload answers.
+
+Run logs are written to the user's XDG state directory as `agent.log` with restrictive
+permissions. Logs contain lifecycle and error information only, not passwords, keys,
+cookies, or full portal responses.
 
 ---
 
@@ -199,5 +204,12 @@ Login → Detect → Open → Extract → Download → Read → Solve → Upload
 
 * System is stable and functional
 * Focus next on validating the scheduled Linux run and adding reliable local logs.
+
+The safe `test` command was successfully run against the portal on Ubuntu. Login,
+assignment detection, subject navigation, and safe assignment inspection worked; no
+files were downloaded and no assignment was uploaded. One detected subject opened an
+alternate `AssignmentView.aspx` page without the normal assignment table, so this is the
+next investigation before a full run. Logging falls back to console output if the local
+state directory is unavailable.
 
 ---
